@@ -95,6 +95,7 @@ class InteractiveAgent(DefaultAgent):
                 interruption_message = "Temporary interruption caught."
             self._interrupt(f"Interrupted by user: {interruption_message}")
 
+    # TODO: Add per-action metrics/tracing instrumentation (see DefaultAgent.execute_actions)
     def execute_actions(self, message: dict) -> list[dict]:
         # Override to handle user confirmation and confirm_exit, with try/finally to preserve partial outputs
         actions = message.get("extra", {}).get("actions", [])

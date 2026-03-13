@@ -4,6 +4,7 @@ or https://minimal-agent.com for a tutorial on the basic building principles.
 
 import json
 import logging
+import time
 import traceback
 from pathlib import Path
 
@@ -12,7 +13,22 @@ from pydantic import BaseModel
 
 from minisweagent import Environment, Model, __version__
 from minisweagent.exceptions import InterruptAgentFlow, LimitsExceeded
+from minisweagent.utils.metrics import (
+    CURRENT_STEP,
+    EXECUTE_ACTIONS_DURATION,
+    METRICS_ENABLED,
+    QUERY_DURATION,
+    STEP_DURATION,
+    TOOL_CALL_DURATION,
+    init_metrics,
+    push_metrics,
+    record_model_call,
+    record_step_tool_count,
+    record_tool_call,
+    track_duration,
+)
 from minisweagent.utils.serialize import recursive_merge
+from minisweagent.utils.tracing import shutdown_tracing, start_span
 
 
 class AgentConfig(BaseModel):
@@ -41,6 +57,10 @@ class DefaultAgent:
         self.logger = logging.getLogger("agent")
         self.cost = 0.0
         self.n_calls = 0
+        self._model_name = getattr(getattr(model, "config", None), "model_name", "unknown")
+        self._model_type = type(model).__name__
+        self._env_type = type(env).__name__
+        init_metrics(self._model_name, self._model_type, self._env_type)
 
     def get_template_vars(self, **kwargs) -> dict:
         return recursive_merge(
@@ -82,23 +102,50 @@ class DefaultAgent:
             self.model.format_message(role="system", content=self._render_template(self.config.system_template)),
             self.model.format_message(role="user", content=self._render_template(self.config.instance_template)),
         )
-        while True:
-            try:
-                self.step()
-            except InterruptAgentFlow as e:
-                self.add_messages(*e.messages)
-            except Exception as e:
-                self.handle_uncaught_exception(e)
-                raise
-            finally:
-                self.save(self.config.output_path)
-            if self.messages[-1].get("role") == "exit":
-                break
+        with start_span(
+            "agent.run",
+            {"task": task, "model_name": self._model_name, "model_type": self._model_type, "env_type": self._env_type},
+        ) as run_span:
+            while True:
+                try:
+                    self.step()
+                except InterruptAgentFlow as e:
+                    self.add_messages(*e.messages)
+                except Exception as e:
+                    self.handle_uncaught_exception(e)
+                    raise
+                finally:
+                    self.save(self.config.output_path)
+                if self.messages[-1].get("role") == "exit":
+                    break
+            if run_span:
+                run_span.set_attribute("exit_status", self.messages[-1].get("extra", {}).get("exit_status", ""))
+                run_span.set_attribute("total_steps", self.n_calls)
+        shutdown_tracing()
         return self.messages[-1].get("extra", {})
 
     def step(self) -> list[dict]:
         """Query the LM, execute actions."""
-        return self.execute_actions(self.query())
+        if METRICS_ENABLED:
+            CURRENT_STEP.labels(agent_id=str(id(self))).set(self.n_calls)
+        with start_span("agent.step", {"step_number": self.n_calls}) as step_span:
+            with track_duration(STEP_DURATION, {"model_name": self._model_name, "env_type": self._env_type}):
+                q_start = time.perf_counter()
+                query_result = self.query()
+                q_latency = time.perf_counter() - q_start
+
+                e_start = time.perf_counter()
+                result = self.execute_actions(query_result)
+                e_latency = time.perf_counter() - e_start
+
+            if step_span:
+                step_span.set_attribute("query_latency_seconds", q_latency)
+                step_span.set_attribute("execute_actions_latency_seconds", e_latency)
+                step_span.set_attribute(
+                    "tool_call_count", len(query_result.get("extra", {}).get("actions", []))
+                )
+        push_metrics()
+        return result
 
     def query(self) -> dict:
         """Query the model and return model messages. Override to add hooks."""
@@ -111,14 +158,51 @@ class DefaultAgent:
                 }
             )
         self.n_calls += 1
-        message = self.model.query(self.messages)
-        self.cost += message.get("extra", {}).get("cost", 0.0)
+        with start_span("agent.query", {"model_name": self._model_name}):
+            with track_duration(QUERY_DURATION, {"model_name": self._model_name, "model_type": self._model_type}):
+                message = self.model.query(self.messages)
+            self.cost += message.get("extra", {}).get("cost", 0.0)
+            record_model_call(self._model_name, self._model_type)
         self.add_messages(message)
         return message
 
     def execute_actions(self, message: dict) -> list[dict]:
         """Execute actions in message, add observation messages, return them."""
-        outputs = [self.env.execute(action) for action in message.get("extra", {}).get("actions", [])]
+        actions = message.get("extra", {}).get("actions", [])
+        outputs = []
+
+        with start_span("agent.execute_actions", {"tool_call_count": len(actions)}):
+            with track_duration(
+                EXECUTE_ACTIONS_DURATION, {"env_type": self._env_type, "model_name": self._model_name}
+            ):
+                for action in actions:
+                    cmd = action.get("command", "")
+                    cmd_prefix = cmd.split()[0] if cmd.split() else "empty"
+
+                    with start_span("tool.execute", {"command": cmd, "command_prefix": cmd_prefix}) as tool_span:
+                        with track_duration(
+                            TOOL_CALL_DURATION, {"env_type": self._env_type, "command_prefix": cmd_prefix}
+                        ):
+                            output = self.env.execute(action)
+
+                        exc_info = output.get("exception_info", "")
+                        if "TimeoutExpired" in exc_info or "timed out" in exc_info:
+                            status = "timeout"
+                        elif output.get("returncode", -1) == 0:
+                            status = "success"
+                        else:
+                            status = "failure"
+                        output_bytes = len(output.get("output", "").encode("utf-8", errors="replace"))
+                        record_tool_call(self._env_type, cmd_prefix, status, output_bytes)
+
+                        if tool_span:
+                            tool_span.set_attribute("returncode", output.get("returncode", -1))
+                            tool_span.set_attribute("status", status)
+                            tool_span.set_attribute("output_bytes", output_bytes)
+
+                    outputs.append(output)
+
+        record_step_tool_count(self._model_name, len(actions))
         return self.add_messages(*self.model.format_observation_messages(message, outputs, self.get_template_vars()))
 
     def serialize(self, *extra_dicts) -> dict:
