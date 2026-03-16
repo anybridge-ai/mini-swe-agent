@@ -128,24 +128,26 @@ class DefaultAgent:
         """Query the LM, execute actions."""
         if METRICS_ENABLED:
             CURRENT_STEP.labels(agent_id=str(id(self))).set(self.n_calls)
-        with start_span("agent.step", {"step_number": self.n_calls}) as step_span:
-            with track_duration(STEP_DURATION, {"model_name": self._model_name, "env_type": self._env_type}):
-                q_start = time.perf_counter()
-                query_result = self.query()
-                q_latency = time.perf_counter() - q_start
+        try:
+            with start_span("agent.step", {"step_number": self.n_calls}) as step_span:
+                with track_duration(STEP_DURATION, {"model_name": self._model_name, "env_type": self._env_type}):
+                    q_start = time.perf_counter()
+                    query_result = self.query()
+                    q_latency = time.perf_counter() - q_start
 
-                e_start = time.perf_counter()
-                result = self.execute_actions(query_result)
-                e_latency = time.perf_counter() - e_start
+                    e_start = time.perf_counter()
+                    result = self.execute_actions(query_result)
+                    e_latency = time.perf_counter() - e_start
 
-            if step_span:
-                step_span.set_attribute("query_latency_seconds", q_latency)
-                step_span.set_attribute("execute_actions_latency_seconds", e_latency)
-                step_span.set_attribute(
-                    "tool_call_count", len(query_result.get("extra", {}).get("actions", []))
-                )
-        push_metrics()
-        return result
+                if step_span:
+                    step_span.set_attribute("query_latency_seconds", q_latency)
+                    step_span.set_attribute("execute_actions_latency_seconds", e_latency)
+                    step_span.set_attribute(
+                        "tool_call_count", len(query_result.get("extra", {}).get("actions", []))
+                    )
+            return result
+        finally:
+            push_metrics()
 
     def query(self) -> dict:
         """Query the model and return model messages. Override to add hooks."""
