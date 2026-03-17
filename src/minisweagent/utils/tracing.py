@@ -29,6 +29,15 @@ if TRACING_ENABLED:
     tracer = trace.get_tracer("mini-swe-agent")
     atexit.register(provider.shutdown)
     _flush_lock = threading.Lock()
+
+    # Auto-inject traceparent header into outgoing HTTP requests (e.g., to vLLM)
+    # so that downstream services can join the same trace.
+    try:
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+        HTTPXClientInstrumentor().instrument()
+    except ImportError:
+        pass
 else:
     tracer = None
     _flush_lock = None

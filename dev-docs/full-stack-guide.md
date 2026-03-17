@@ -254,7 +254,7 @@ sg docker -c "bash -c '
   OPENAI_API_KEY=EMPTY \
   MSWEA_PUSHGATEWAY_URL=http://localhost:9091 \
   MSWEA_OTLP_ENDPOINT=http://localhost:4318 \
-  python /tmp/mswea-tempo/concurrent_test.py
+  python examples/concurrent_test.py
 '"
 ```
 
