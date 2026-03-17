@@ -51,11 +51,11 @@ Examples:
 DEFAULT_CONFIG_FILE = builtin_config_dir / "benchmarks" / "swebench.yaml"
 
 DATASET_MAPPING = {
-    "full": "princeton-nlp/SWE-Bench",
-    "verified": "princeton-nlp/SWE-Bench_Verified",
-    "lite": "princeton-nlp/SWE-Bench_Lite",
-    "multimodal": "princeton-nlp/SWE-Bench_Multimodal",
-    "multilingual": "swe-bench/SWE-Bench_Multilingual",
+    "full": "princeton-nlp/SWE-bench",
+    "verified": "princeton-nlp/SWE-bench_Verified",
+    "lite": "princeton-nlp/SWE-bench_Lite",
+    "multimodal": "princeton-nlp/SWE-bench_Multimodal",
+    "multilingual": "SWE-bench/SWE-bench_Multilingual",
     "smith": "SWE-bench/SWE-smith",
     "_test": "klieret/swe-bench-dummy-test-dataset",
     "rebench": "nebius/SWE-rebench",
