@@ -2,6 +2,7 @@
 """Concurrent agent test: 10 agents hitting vLLM + persistent swerex server."""
 
 import concurrent.futures
+import os
 import time
 from pathlib import Path
 
@@ -9,12 +10,12 @@ from minisweagent.agents.default import DefaultAgent
 from minisweagent.environments.extra.swerex_remote import SwerexRemoteEnvironment
 from minisweagent.models.litellm_textbased_model import LitellmTextbasedModel
 
-SWEREX_HOST = "http://127.0.0.1"
-SWEREX_PORT = 8000
-SWEREX_AUTH_TOKEN = "test123"
+SWEREX_HOST = os.environ.get("SWEREX_HOST", "http://127.0.0.1")
+SWEREX_PORT = int(os.environ.get("SWEREX_PORT", "8000"))
+SWEREX_AUTH_TOKEN = os.environ.get("SWEREX_AUTH_TOKEN", "changeme")
 
-VLLM_BASE = "http://143.248.136.10:8066/v1"
-MODEL_NAME = "openai/Qwen/Qwen2.5-32B-Instruct"
+VLLM_BASE = os.environ.get("VLLM_BASE", "http://localhost:8066/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "openai/Qwen/Qwen2.5-32B-Instruct")
 
 TASKS = [
     # Multi-step file manipulation tasks

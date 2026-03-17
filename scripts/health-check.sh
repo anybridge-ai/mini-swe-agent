@@ -2,10 +2,10 @@
 # Health check all components at once.
 set -euo pipefail
 
-VLLM_BASE="${VLLM_BASE:-http://143.248.136.10:8066}"
+VLLM_BASE="${VLLM_BASE:-http://localhost:8066}"
 SWEREX_HOST="${SWEREX_HOST:-http://127.0.0.1:8000}"
 PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-http://localhost:9091}"
-OTLP_ENDPOINT="${OTLP_ENDPOINT:-http://143.248.136.10:4318}"
+OTLP_ENDPOINT="${OTLP_ENDPOINT:-http://localhost:4318}"
 GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
 
 check() {

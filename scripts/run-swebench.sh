@@ -14,7 +14,7 @@ SPLIT="${SPLIT:-dev}"
 OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_ROOT/results/swebench_run}"
 REDO=""
 
-VLLM_BASE="${VLLM_BASE:-http://143.248.136.10:8066/v1}"
+VLLM_BASE="${VLLM_BASE:-http://localhost:8066/v1}"
 MODEL="${MODEL:-openai/Qwen/Qwen2.5-32B-Instruct}"
 
 # Parse args
@@ -32,7 +32,7 @@ done
 
 export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 export MSWEA_PUSHGATEWAY_URL="${MSWEA_PUSHGATEWAY_URL:-http://localhost:9091}"
-export MSWEA_OTLP_ENDPOINT="${MSWEA_OTLP_ENDPOINT:-http://143.248.136.10:4318}"
+export MSWEA_OTLP_ENDPOINT="${MSWEA_OTLP_ENDPOINT:-http://localhost:4318}"
 
 source "$PROJECT_ROOT/.venv/bin/activate"
 

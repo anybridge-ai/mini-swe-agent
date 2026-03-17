@@ -8,7 +8,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
 export MSWEA_PUSHGATEWAY_URL="${MSWEA_PUSHGATEWAY_URL:-http://localhost:9091}"
-export MSWEA_OTLP_ENDPOINT="${MSWEA_OTLP_ENDPOINT:-http://143.248.136.10:4318}"
+export MSWEA_OTLP_ENDPOINT="${MSWEA_OTLP_ENDPOINT:-http://localhost:4318}"
 
 source "$PROJECT_ROOT/.venv/bin/activate"
 python "$PROJECT_ROOT/examples/concurrent_test.py"
