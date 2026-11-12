@@ -1,0 +1,33 @@
+name: Linear issue requirement
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  linear-issue:
+    name: Linear issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check title and matching Linear link
+        shell: python
+        run: |
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          pr = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())['pull_request']
+          title = pr.get('title') or ''
+          body = re.sub(r'<!--.*?-->', '', pr.get('body') or '', flags=re.S)
+          match = re.match(r'^\[(ANY-[1-9][0-9]*)\] \S', title)
+          if not match:
+              raise SystemExit('PR title must start with [ANY-number] and a description')
+          pattern = r'https://linear\.app/anybridge/issue/' + re.escape(match[1]) + r'(?=[/\s)>#?]|$)'
+          if not re.search(pattern, body):
+              raise SystemExit('PR body must include the Linear URL matching the title issue')
+          print('Linear issue requirement passed')
