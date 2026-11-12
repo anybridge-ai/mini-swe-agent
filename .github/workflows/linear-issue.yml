@@ -13,21 +13,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Check title and matching Linear link
+      - name: Check Linear link or minor-change exemption
         shell: python
         run: |
+          """Check a matching Linear link or an explicit minor-change exemption."""
+          import re
+
+
+          def validate_linear(title, body):
+              body = re.sub(r'<!--.*?-->', '', body, flags=re.S)
+              match = re.match(r'^\[(ANY-[1-9][0-9]*)\] \S', title)
+              reasons = re.findall(r'^Issue exemption:[ \t]*(.*)$', body, re.M)
+              if match:
+                  if reasons:
+                      return ['Use an issue link or an exemption, not both']
+                  pattern = r'https://linear\.app/anybridge/issue/' + re.escape(match[1]) + r'(?=[/\s)>#?]|$)'
+                  return [] if re.search(pattern, body) else ['PR body must include the Linear URL matching the title issue']
+              if not title.strip() or re.search(r'\bANY-\d+\b', title) or title.startswith('[no-issue]'):
+                  return ['Use [ANY-number] with a matching link, or a normal title with Issue exemption']
+              if re.search(r'https://linear\.app/anybridge/issue/ANY-\d+', body) or re.search(r'^Issue:', body, re.M):
+                  return ['Issue-linked PR titles must start with [ANY-number]']
+              if len(reasons) != 1:
+                  return ['Provide one Issue exemption: reason for a change with no meaning or behavior change']
+              reason = reasons[0].strip()
+              meaningful = re.sub(r'https?://\S+|[`*_{}<>\[\]]', '', reason).strip()
+              if len(meaningful) < 8 or re.search(r'\{[^}]*\}|^(?:n/?a|none|todo|tbd)\b', reason, re.I):
+                  return ['Issue exemption requires a concrete reason, not a placeholder']
+              return []
+
           import json
           import os
-          import re
           from pathlib import Path
-
           pr = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())['pull_request']
-          title = pr.get('title') or ''
-          body = re.sub(r'<!--.*?-->', '', pr.get('body') or '', flags=re.S)
-          match = re.match(r'^\[(ANY-[1-9][0-9]*)\] \S', title)
-          if not match:
-              raise SystemExit('PR title must start with [ANY-number] and a description')
-          pattern = r'https://linear\.app/anybridge/issue/' + re.escape(match[1]) + r'(?=[/\s)>#?]|$)'
-          if not re.search(pattern, body):
-              raise SystemExit('PR body must include the Linear URL matching the title issue')
+          errors = validate_linear(pr.get('title') or '', pr.get('body') or '')
+          if errors:
+              raise SystemExit('\n'.join(errors))
           print('Linear issue requirement passed')
